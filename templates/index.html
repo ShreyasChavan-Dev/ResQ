@@ -1,0 +1,453 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResQ Monitoring Dashboard</title>
+
+    <meta http-equiv="refresh" content="5">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 30px;
+            font-family: Arial, sans-serif;
+            background: #f3f6fa;
+            color: #263445;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        header {
+            background: #172b4d;
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+        }
+
+        header h1 {
+            margin: 0 0 8px;
+        }
+
+        .live {
+            color: #75e6a2;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+
+        h2 {
+            margin-top: 30px;
+            color: #172b4d;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .card h3 {
+            font-size: 14px;
+            color: #65758b;
+            margin: 0 0 12px;
+        }
+
+        .value {
+            font-size: 27px;
+            font-weight: bold;
+        }
+
+        .service-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .healthy {
+            background: #d9f7e5;
+            color: #147a42;
+        }
+
+        .failed {
+            background: #ffe0e0;
+            color: #b42318;
+        }
+
+        .dependency {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .arrow {
+            font-size: 30px;
+            margin: 12px;
+            color: #64748b;
+        }
+
+        .event-list {
+            background: white;
+            border-radius: 10px;
+            overflow-x: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 650px;
+        }
+
+        th, td {
+            padding: 14px;
+            text-align: left;
+            border-bottom: 1px solid #e8edf3;
+        }
+
+        th {
+            background: #edf2f8;
+            color: #334155;
+        }
+
+        .event-type {
+            font-weight: bold;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 25px;
+            color: #64748b;
+        }
+
+        button {
+            background: #172b4d;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #294c7c;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #simulation-result {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 35px;
+            color: #718096;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <header>
+        <h1>ResQ Monitoring Dashboard</h1>
+
+        <p>
+            Intelligent Service Monitoring and Automatic Recovery
+        </p>
+
+        <div class="live">
+            ● LIVE MONITORING
+        </div>
+    </header>
+
+    <h2>System Overview</h2>
+
+    <div class="stats-grid">
+
+        <div class="card">
+            <h3>Total Services</h3>
+            <div class="value">{{ total_services }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Healthy Services</h3>
+            <div class="value">{{ healthy_services }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Failed Services</h3>
+            <div class="value">{{ failed_services }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Total Failures</h3>
+            <div class="value">{{ total_failures }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Successful Recoveries</h3>
+            <div class="value">{{ successful_recoveries }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Failed Recoveries</h3>
+            <div class="value">{{ failed_recoveries }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Blocked Recoveries</h3>
+            <div class="value">{{ blocked_recoveries }}</div>
+        </div>
+
+        <div class="card">
+            <h3>Recovery Success Rate</h3>
+            <div class="value">{{ success_rate }}%</div>
+        </div>
+
+    </div>
+
+    <h2>Monitored Services</h2>
+
+    <div class="service-grid">
+
+        {% for service in services %}
+
+        <div class="card">
+
+            <h3>{{ service.name }} Service</h3>
+
+            <p>Port: {{ service.port }}</p>
+
+            <p>Health Endpoint: /health</p>
+
+            <p>
+                Status:
+
+                {% if service.status == "HEALTHY" %}
+                    <span class="status healthy">HEALTHY</span>
+                {% elif service.status == "FAILED" %}
+                    <span class="status failed">FAILED</span>
+                {% else %}
+                    <span class="status">UNKNOWN</span>
+                {% endif %}
+
+            </p>
+
+            <p>
+                Response Time:
+                <strong>{{ service.response_time }} ms</strong>
+            </p>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+    <h2>Service Dependency Graph</h2>
+
+    <div class="dependency">
+
+        <h3>Backend Service</h3>
+
+        <p>No dependencies</p>
+
+        <div class="arrow">↓</div>
+
+        <h3>Payment Service</h3>
+
+        <p>Depends on Backend Service</p>
+
+    </div>
+
+    <h2>Automatic Recovery Order</h2>
+
+    <div class="card">
+
+        {% for service in recovery_order %}
+
+        <p>
+            <strong>{{ loop.index }}.</strong>
+            {{ service }}
+        </p>
+
+        {% endfor %}
+
+    </div>
+
+    <h2>Failure Simulation</h2>
+
+    <div class="service-grid">
+
+        <div class="card">
+
+            <h3>Backend Service</h3>
+
+            <p>
+                Stop Backend to test automatic recovery.
+            </p>
+
+            <button onclick="simulateFailure('Backend')">
+                Simulate Backend Failure
+            </button>
+
+        </div>
+
+        <div class="card">
+
+            <h3>Payment Service</h3>
+
+            <p>
+                Stop Payment to test automatic recovery.
+            </p>
+
+            <button onclick="simulateFailure('Payment')">
+                Simulate Payment Failure
+            </button>
+
+        </div>
+
+    </div>
+
+    <p id="simulation-result"></p>
+
+    <h2>Recovery Event History</h2>
+
+    <div class="event-list">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Service</th>
+                    <th>Event</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for event in event_history %}
+
+                <tr>
+                    <td>{{ event.timestamp }}</td>
+                    <td>{{ event.service }}</td>
+                    <td class="event-type">
+                        {{ event.event }}
+                    </td>
+                    <td>{{ event.message }}</td>
+                </tr>
+
+                {% else %}
+
+                <tr>
+                    <td colspan="4" class="empty">
+                        No recovery events recorded yet.
+                    </td>
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <footer>
+        <p>ResQ - Intelligent Service Recovery System</p>
+    </footer>
+
+</div>
+
+<script>
+async function simulateFailure(serviceName) {
+
+    const result = document.getElementById(
+        "simulation-result"
+    );
+
+    const buttons = document.querySelectorAll("button");
+
+    buttons.forEach(button => {
+        button.disabled = true;
+    });
+
+    result.innerText =
+        "Simulating " + serviceName + " failure...";
+
+    try {
+
+        const response = await fetch(
+            "/api/simulation/failure/" + serviceName,
+            {
+                method: "POST"
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Simulation failed"
+            );
+        }
+
+        result.innerText = data.message;
+
+    } catch (error) {
+
+        result.innerText = "Error: " + error.message;
+
+    } finally {
+
+        buttons.forEach(button => {
+            button.disabled = false;
+        });
+
+    }
+}
+</script>
+
+</body>
+</html>
