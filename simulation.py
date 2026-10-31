@@ -1,84 +1,78 @@
 
-import subprocess
-import sys
-
 from fastapi import APIRouter, HTTPException
+import docker
+from docker.errors import DockerException, NotFound
 
 
-router = APIRouter(prefix="/api/simulation")
+router = APIRouter()
 
-
-SERVICE_PORTS = {
-    "Backend": 8001,
-    "Payment": 8002
+# Only these two containers can be stopped by the simulator.
+SERVICE_CONTAINERS = {
+    "backend": "resq-backend",
+    "payment": "resq-payment"
 }
 
 
-@router.post("/failure/{service_name}")
+@router.post("/simulate-failure/{service_name}")
 def simulate_failure(service_name: str):
+    """
+    Simulate a service failure by stopping its Docker container.
 
-    service_name = service_name.capitalize()
+    The ResQ monitor should detect the failure and restart
+    the container according to its recovery rules.
+    """
 
-    if service_name not in SERVICE_PORTS:
+    service_name = service_name.lower().strip()
 
+    if service_name not in SERVICE_CONTAINERS:
         raise HTTPException(
-            status_code=404,
-            detail="Service not found"
+            status_code=400,
+            detail="Unknown service. Use backend or payment."
         )
 
-    port = SERVICE_PORTS[service_name]
-
-    if sys.platform != "win32":
-
-        raise HTTPException(
-            status_code=500,
-            detail="This simulation currently supports Windows only."
-        )
+    container_name = SERVICE_CONTAINERS[service_name]
 
     try:
+        client = docker.from_env()
 
-        command = (
-            f"$connections = Get-NetTCPConnection "
-            f"-LocalPort {port} "
-            f"-State Listen "
-            f"-ErrorAction SilentlyContinue; "
-            f"if ($connections) {{ "
-            f"$connections | ForEach-Object "
-            f"{{ Stop-Process -Id $_.OwningProcess -Force }} "
-            f"}} else {{ exit 2 }}"
-        )
+        container = client.containers.get(container_name)
 
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                command
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+        if container.status == "running":
+            container.stop(timeout=5)
 
-        if result.returncode != 0:
-
-            raise HTTPException(
-                status_code=409,
-                detail="Service is not running or could not be stopped."
-            )
-
-        return {
-            "service": service_name,
-            "status": "failure_simulated",
-            "message": (
-                f"{service_name} was stopped successfully. "
-                "ResQ should detect the failure."
-            )
-        }
-
-    except subprocess.TimeoutExpired:
+            return {
+                "success": True,
+                "service": service_name,
+                "container": container_name,
+                "message": (
+                    f"Failure simulated for {service_name}. "
+                    "ResQ will detect and attempt recovery."
+                )
+            }
 
         raise HTTPException(
-            status_code=500,
-            detail="Simulation command timed out."
+            status_code=409,
+            detail=f"{container_name} is not running."
         )
+
+    except NotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Docker container {container_name} was not found."
+        )
+
+    except DockerException as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Docker operation failed: {error}"
+        )
+
+
+@router.get("/simulation/health")
+def simulation_health():
+    """Check whether the simulation API is available."""
+
+    return {
+        "service": "ResQ Failure Simulation",
+        "status": "healthy"
+    }

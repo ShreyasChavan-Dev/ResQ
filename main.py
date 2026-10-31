@@ -1,4 +1,3 @@
-
 import json
 import time
 from pathlib import Path
@@ -6,35 +5,37 @@ from pathlib import Path
 from monitoring.monitor import Service, MonitoringEngine
 
 
-PROJECT_DIR = Path(__file__).resolve().parent
+# Shared folder used by the dashboard and monitor containers.
+DATA_DIR = Path("/app/runtime")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-STATS_FILE = PROJECT_DIR / "resq_runtime_stats.json"
-EVENTS_FILE = PROJECT_DIR / "resq_event_history.json"
+STATS_FILE = DATA_DIR / "resq_runtime_stats.json"
+EVENTS_FILE = DATA_DIR / "resq_event_history.json"
 
 
+# Create the monitoring engine.
 resq = MonitoringEngine()
 
-
+# Docker Compose service names are used as hostnames.
 resq.add_service(
     Service(
         name="Backend",
-        health_url="http://127.0.0.1:8001/health",
+        health_url="http://backend:8001/health",
         app_module="backend_service",
         port=8001
     )
 )
 
-
 resq.add_service(
     Service(
         name="Payment",
-        health_url="http://127.0.0.1:8002/health",
+        health_url="http://payment:8002/health",
         app_module="payment_service",
         port=8002
     )
 )
 
-
+# Payment depends on Backend.
 resq.add_dependency(
     service_name="Payment",
     depends_on="Backend"
@@ -42,69 +43,40 @@ resq.add_dependency(
 
 
 def save_runtime_data():
+    """Save monitoring statistics and event history."""
 
-    try:
+    stats = resq.get_dashboard_data()
 
-        statistics = resq.get_statistics()
+    with open(STATS_FILE, "w", encoding="utf-8") as file:
+        json.dump(stats, file, indent=4)
 
-        with open(STATS_FILE, "w") as file:
-
-            json.dump(
-                statistics,
-                file,
-                indent=4
-            )
-
-        with open(EVENTS_FILE, "w") as file:
-
-            json.dump(
-                resq.get_event_history(),
-                file,
-                indent=4
-            )
-
-    except (OSError, ValueError) as error:
-
-        print(
-            "Could not save ResQ runtime data:",
-            error
+    with open(EVENTS_FILE, "w", encoding="utf-8") as file:
+        json.dump(
+            resq.get_event_history(),
+            file,
+            indent=4
         )
 
 
-resq.show_dependencies()
-
-
-print("\n====================================")
-print("       ResQ Monitoring System")
-print("====================================")
-
-print("Backend Service: Port 8001")
-print("Payment Service: Port 8002")
-print("Dependency-Aware Recovery: Enabled")
-print("Intelligent Recovery Protection: Enabled")
-print("Maximum Attempts: 3")
-print("Cooldown: 30 seconds")
-print("Monitoring interval: 5 seconds")
-print("Automatic recovery: Enabled")
-print("Event History: Enabled")
-print("Press Ctrl + C to stop.\n")
-
-
-try:
+def main():
+    print("===================================")
+    print("       RESQ MONITOR STARTED")
+    print("===================================")
 
     while True:
+        try:
+            print("\n[RESQ] Checking all services...")
 
-        resq.monitor_all()
+            resq.monitor_all()
+            save_runtime_data()
 
-        save_runtime_data()
+            print("[RESQ] Monitoring cycle completed.")
+
+        except Exception as error:
+            print(f"[RESQ ERROR] Monitoring error: {error}")
 
         time.sleep(5)
 
 
-except KeyboardInterrupt:
-
-    print("\nResQ monitoring stopped.")
-
-    save_runtime_data()
-
-    resq.show_recovery_statistics()
+if __name__ == "__main__":
+    main()

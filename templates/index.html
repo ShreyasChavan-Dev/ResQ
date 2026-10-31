@@ -1,183 +1,231 @@
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ResQ Monitoring Dashboard</title>
-
     <meta http-equiv="refresh" content="5">
+    <title>ResQ | Intelligent Service Recovery</title>
 
     <style>
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            margin: 0;
-            padding: 30px;
             font-family: Arial, sans-serif;
-            background: #f3f6fa;
-            color: #263445;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: auto;
+            background: #0b1120;
+            color: #e5e7eb;
+            min-height: 100vh;
         }
 
         header {
-            background: #172b4d;
-            color: white;
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 25px;
+            padding: 24px 5%;
+            background: #111c30;
+            border-bottom: 1px solid #26344c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
         header h1 {
-            margin: 0 0 8px;
+            color: #38bdf8;
+            font-size: 28px;
+        }
+
+        header p {
+            color: #94a3b8;
+            margin-top: 5px;
+            font-size: 13px;
         }
 
         .live {
-            color: #75e6a2;
-            font-weight: bold;
-            margin-top: 15px;
+            color: #4ade80;
+            font-size: 13px;
         }
 
-        h2 {
-            margin-top: 30px;
-            color: #172b4d;
+        main {
+            width: 90%;
+            max-width: 1400px;
+            margin: 30px auto;
+        }
+
+        .section-title {
+            font-size: 19px;
+            margin-bottom: 17px;
+            color: #f8fafc;
         }
 
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
+            gap: 16px;
+            margin-bottom: 32px;
         }
 
-        .card {
-            background: white;
+        .stat-card, .panel, .service-card {
+            background: #111c30;
+            border: 1px solid #26344c;
+            border-radius: 12px;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
 
-        .card h3 {
-            font-size: 14px;
-            color: #65758b;
-            margin: 0 0 12px;
+        .stat-card p {
+            color: #94a3b8;
+            font-size: 13px;
         }
 
-        .value {
-            font-size: 27px;
-            font-weight: bold;
+        .stat-card h2 {
+            margin-top: 12px;
+            font-size: 29px;
+            color: #38bdf8;
         }
 
-        .service-grid {
+        .services-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+            margin-bottom: 32px;
         }
 
-        .status {
+        .service-card h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .service-status {
             display: inline-block;
             padding: 6px 12px;
             border-radius: 20px;
-            font-weight: bold;
             font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 15px;
         }
 
         .healthy {
-            background: #d9f7e5;
-            color: #147a42;
+            background: #14532d;
+            color: #86efac;
         }
 
-        .failed {
-            background: #ffe0e0;
-            color: #b42318;
+        .unhealthy {
+            background: #7f1d1d;
+            color: #fecaca;
         }
 
-        .dependency {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            text-align: center;
+        .unknown {
+            background: #334155;
+            color: #cbd5e1;
         }
 
-        .arrow {
-            font-size: 30px;
-            margin: 12px;
-            color: #64748b;
+        .service-info {
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 2;
         }
 
-        .event-list {
-            background: white;
-            border-radius: 10px;
+        button {
+            border: none;
+            border-radius: 7px;
+            padding: 10px 15px;
+            margin-top: 15px;
+            color: white;
+            background: #dc2626;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #b91c1c;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .panel {
+            margin-bottom: 25px;
             overflow-x: auto;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 650px;
+            min-width: 500px;
         }
 
         th, td {
-            padding: 14px;
             text-align: left;
-            border-bottom: 1px solid #e8edf3;
+            padding: 13px;
+            border-bottom: 1px solid #26344c;
+            font-size: 13px;
         }
 
         th {
-            background: #edf2f8;
-            color: #334155;
+            color: #38bdf8;
+        }
+
+        td {
+            color: #cbd5e1;
         }
 
         .event-type {
             font-weight: bold;
         }
 
-        .empty {
-            text-align: center;
-            padding: 25px;
-            color: #64748b;
+        .event-success {
+            color: #4ade80;
         }
 
-        button {
-            background: #172b4d;
-            color: white;
-            border: none;
-            padding: 12px 18px;
-            border-radius: 7px;
-            cursor: pointer;
-            font-weight: bold;
+        .event-warning {
+            color: #facc15;
         }
 
-        button:hover {
-            background: #294c7c;
+        .event-error {
+            color: #f87171;
         }
 
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+        .event-info {
+            color: #38bdf8;
         }
 
-        #simulation-result {
-            margin-top: 15px;
-            font-weight: bold;
+        .dependency-list {
+            line-height: 2;
+            color: #cbd5e1;
+        }
+
+        .notice {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 12px;
+        }
+
+        #simulation-message {
+            margin-top: 14px;
+            font-size: 13px;
+            color: #38bdf8;
+            min-height: 18px;
         }
 
         footer {
             text-align: center;
-            margin-top: 35px;
-            color: #718096;
+            padding: 25px;
+            color: #64748b;
+            font-size: 12px;
+            border-top: 1px solid #26344c;
         }
 
         @media (max-width: 600px) {
-            body {
-                padding: 15px;
+            header {
+                padding: 20px;
+            }
+
+            main {
+                width: 92%;
             }
         }
     </style>
@@ -185,268 +233,239 @@
 
 <body>
 
-<div class="container">
-
-    <header>
-        <h1>ResQ Monitoring Dashboard</h1>
-
-        <p>
-            Intelligent Service Monitoring and Automatic Recovery
-        </p>
-
-        <div class="live">
-            ● LIVE MONITORING
-        </div>
-    </header>
-
-    <h2>System Overview</h2>
-
-    <div class="stats-grid">
-
-        <div class="card">
-            <h3>Total Services</h3>
-            <div class="value">{{ total_services }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Healthy Services</h3>
-            <div class="value">{{ healthy_services }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Failed Services</h3>
-            <div class="value">{{ failed_services }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Total Failures</h3>
-            <div class="value">{{ total_failures }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Successful Recoveries</h3>
-            <div class="value">{{ successful_recoveries }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Failed Recoveries</h3>
-            <div class="value">{{ failed_recoveries }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Blocked Recoveries</h3>
-            <div class="value">{{ blocked_recoveries }}</div>
-        </div>
-
-        <div class="card">
-            <h3>Recovery Success Rate</h3>
-            <div class="value">{{ success_rate }}%</div>
-        </div>
-
+<header>
+    <div>
+        <h1>ResQ</h1>
+        <p>Intelligent Service Monitoring & Recovery System</p>
     </div>
 
-    <h2>Monitored Services</h2>
+    <div class="live">● Monitoring Dashboard</div>
+</header>
 
-    <div class="service-grid">
+<main>
+
+    <h2 class="section-title">System Overview</h2>
+
+    <section class="stats-grid">
+
+        <div class="stat-card">
+            <p>Total Services</p>
+            <h2>{{ total_services | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Healthy Services</p>
+            <h2>{{ healthy_services | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Unhealthy Services</p>
+            <h2>{{ unhealthy_services | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Total Failures</p>
+            <h2>{{ total_failures | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Successful Recoveries</p>
+            <h2>{{ successful_recoveries | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Failed Recoveries</p>
+            <h2>{{ failed_recoveries | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Blocked Recoveries</p>
+            <h2>{{ blocked_recoveries | default(0) }}</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Recovery Success Rate</p>
+            <h2>{{ success_rate | default(0) }}%</h2>
+        </div>
+
+    </section>
+
+
+    <h2 class="section-title">Monitored Services</h2>
+
+    <section class="services-grid">
 
         {% for service in services %}
 
-        <div class="card">
+        <div class="service-card">
 
-            <h3>{{ service.name }} Service</h3>
+            <h3>{{ service.name }}</h3>
 
-            <p>Port: {{ service.port }}</p>
+            {% if service.status == "Healthy" %}
+                <span class="service-status healthy">● Healthy</span>
+            {% elif service.status == "Unhealthy" %}
+                <span class="service-status unhealthy">● Unhealthy</span>
+            {% else %}
+                <span class="service-status unknown">● Unknown</span>
+            {% endif %}
 
-            <p>Health Endpoint: /health</p>
+            <div class="service-info">
+                Response Time: {{ service.response_time }} ms<br>
+                Total Failures: {{ service.total_failures }}<br>
+                Last Checked: {{ service.last_checked or "Not checked" }}
+            </div>
 
-            <p>
-                Status:
+            <button
+                type="button"
+                onclick="simulateFailure('{{ service.name | lower }}', this)"
+            >
+                Simulate Failure
+            </button>
 
-                {% if service.status == "HEALTHY" %}
-                    <span class="status healthy">HEALTHY</span>
-                {% elif service.status == "FAILED" %}
-                    <span class="status failed">FAILED</span>
-                {% else %}
-                    <span class="status">UNKNOWN</span>
-                {% endif %}
+        </div>
 
-            </p>
+        {% else %}
 
-            <p>
-                Response Time:
-                <strong>{{ service.response_time }} ms</strong>
-            </p>
-
+        <div class="service-card">
+            No services have been registered yet.
         </div>
 
         {% endfor %}
 
-    </div>
+    </section>
 
-    <h2>Service Dependency Graph</h2>
+    <div id="simulation-message"></div>
 
-    <div class="dependency">
 
-        <h3>Backend Service</h3>
+    <h2 class="section-title">Service Dependencies</h2>
 
-        <p>No dependencies</p>
+    <section class="panel">
 
-        <div class="arrow">↓</div>
+        <div class="dependency-list">
 
-        <h3>Payment Service</h3>
+            {% for item in dependency_graph | default([]) %}
+                <p>
+                    <strong>{{ item.service }}</strong>
+                    depends on:
+                    {{ item.dependencies }}
+                </p>
+            {% endfor %}
 
-        <p>Depends on Backend Service</p>
+            <p>
+                <strong>Recovery Order:</strong>
+                {% for service in recovery_order | default([]) %}
+                    {{ service }}{% if not loop.last %} → {% endif %}
+                {% else %}
+                    Not available
+                {% endfor %}
+            </p>
 
-    </div>
+        </div>
 
-    <h2>Automatic Recovery Order</h2>
-
-    <div class="card">
-
-        {% for service in recovery_order %}
-
-        <p>
-            <strong>{{ loop.index }}.</strong>
-            {{ service }}
+        <p class="notice">
+            Dependencies are recovered before the services that depend on them.
         </p>
 
-        {% endfor %}
+    </section>
 
-    </div>
 
-    <h2>Failure Simulation</h2>
+    <h2 class="section-title">Recovery Event History</h2>
 
-    <div class="service-grid">
-
-        <div class="card">
-
-            <h3>Backend Service</h3>
-
-            <p>
-                Stop Backend to test automatic recovery.
-            </p>
-
-            <button onclick="simulateFailure('Backend')">
-                Simulate Backend Failure
-            </button>
-
-        </div>
-
-        <div class="card">
-
-            <h3>Payment Service</h3>
-
-            <p>
-                Stop Payment to test automatic recovery.
-            </p>
-
-            <button onclick="simulateFailure('Payment')">
-                Simulate Payment Failure
-            </button>
-
-        </div>
-
-    </div>
-
-    <p id="simulation-result"></p>
-
-    <h2>Recovery Event History</h2>
-
-    <div class="event-list">
+    <section class="panel">
 
         <table>
-
             <thead>
                 <tr>
                     <th>Timestamp</th>
-                    <th>Service</th>
-                    <th>Event</th>
-                    <th>Details</th>
+                    <th>Event Type</th>
+                    <th>Description</th>
                 </tr>
             </thead>
 
             <tbody>
 
-                {% for event in event_history %}
+                {% for event in event_history | default([]) %}
 
                 <tr>
                     <td>{{ event.timestamp }}</td>
-                    <td>{{ event.service }}</td>
-                    <td class="event-type">
-                        {{ event.event }}
+
+                    <td>
+                        <span class="event-type
+                            {% if event.type == 'SUCCESS' %}
+                                event-success
+                            {% elif event.type == 'WARNING' %}
+                                event-warning
+                            {% elif event.type == 'ERROR' %}
+                                event-error
+                            {% else %}
+                                event-info
+                            {% endif %}
+                        ">
+                            {{ event.type }}
+                        </span>
                     </td>
+
                     <td>{{ event.message }}</td>
                 </tr>
 
                 {% else %}
 
                 <tr>
-                    <td colspan="4" class="empty">
-                        No recovery events recorded yet.
-                    </td>
+                    <td colspan="3">No events recorded yet.</td>
                 </tr>
 
                 {% endfor %}
 
             </tbody>
-
         </table>
 
-    </div>
+    </section>
 
-    <footer>
-        <p>ResQ - Intelligent Service Recovery System</p>
-    </footer>
+</main>
 
-</div>
+
+<footer>
+    ResQ — Intelligent Service Monitoring and Automatic Recovery
+</footer>
+
 
 <script>
-async function simulateFailure(serviceName) {
-
-    const result = document.getElementById(
-        "simulation-result"
-    );
-
-    const buttons = document.querySelectorAll("button");
-
-    buttons.forEach(button => {
-        button.disabled = true;
-    });
-
-    result.innerText =
-        "Simulating " + serviceName + " failure...";
-
-    try {
-
-        const response = await fetch(
-            "/api/simulation/failure/" + serviceName,
-            {
-                method: "POST"
-            }
+    async function simulateFailure(serviceName, button) {
+        const message = document.getElementById(
+            "simulation-message"
         );
 
-        const data = await response.json();
+        button.disabled = true;
+        message.textContent =
+            "Sending failure simulation request for " +
+            serviceName + "...";
 
-        if (!response.ok) {
-            throw new Error(
-                data.detail || "Simulation failed"
+        try {
+            const response = await fetch(
+                "/simulate-failure/" + encodeURIComponent(serviceName),
+                {
+                    method: "POST"
+                }
             );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result.detail || "Simulation request failed."
+                );
+            }
+
+            message.textContent =
+                result.message ||
+                "Failure simulated. ResQ will attempt recovery.";
+
+        } catch (error) {
+            message.textContent = "Error: " + error.message;
         }
 
-        result.innerText = data.message;
-
-    } catch (error) {
-
-        result.innerText = "Error: " + error.message;
-
-    } finally {
-
-        buttons.forEach(button => {
-            button.disabled = false;
-        });
-
+        button.disabled = false;
     }
-}
 </script>
 
 </body>

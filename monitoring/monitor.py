@@ -1,41 +1,48 @@
 
 import time
-import requests
-
 from datetime import datetime
 from collections import deque
+
+import requests
+import docker
 
 from recovery.recovery_manager import RecoveryManager
 from dependency.dependency_graph import DependencyGraph
 
 
 class Service:
-    """Represents a service monitored by ResQ."""
+    """Stores information about a monitored service."""
 
     def __init__(
         self,
         name,
         health_url,
         app_module,
-        port
+        port,
+        container_name=None
     ):
         self.name = name
         self.health_url = health_url
         self.app_module = app_module
         self.port = port
+        self.container_name = container_name or {
+            "Backend": "resq-backend",
+            "Payment": "resq-payment"
+        }.get(name, name.lower())
 
-        self.status = "UNKNOWN"
+        self.status = "Unknown"
         self.response_time = 0
         self.last_checked = None
-
         self.total_failures = 0
 
 
 class MonitoringEngine:
-    """Monitors services and manages automatic recovery."""
+    """
+    Monitors services and automatically recovers failed
+    Docker containers while respecting dependencies.
+    """
 
     def __init__(self):
-
         self.services = {}
 
         self.dependency_graph = DependencyGraph()
@@ -46,60 +53,50 @@ class MonitoringEngine:
         )
 
         self.total_failures = 0
-        self.successful_recoveries = 0
-        self.failed_recoveries = 0
-
-        # Store the latest 100 monitoring and recovery events.
         self.event_history = deque(maxlen=100)
 
-    def record_event(
-        self,
-        service_name,
-        event_type,
-        message
-    ):
-        """Save a timestamped event."""
+        self.docker_client = None
+
+    def get_docker_client(self):
+        """Connect to the Docker Engine when required."""
+
+        if self.docker_client is None:
+            self.docker_client = docker.from_env()
+
+        return self.docker_client
+
+    def record_event(self, message, event_type="INFO"):
+        """Record an event with its timestamp."""
 
         event = {
             "timestamp": datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             ),
-            "service": service_name,
-            "event": event_type,
+            "type": event_type,
             "message": message
         }
 
         self.event_history.append(event)
 
-        print(
-            f"[RESQ EVENT] {event['timestamp']} | "
-            f"{service_name} | {event_type} | {message}"
-        )
+        print(f"[RESQ {event_type}] {message}")
 
     def get_event_history(self):
-        """Return the latest events, newest first."""
+        """Return recorded events as a list."""
 
-        return list(reversed(self.event_history))
+        return list(self.event_history)
 
     def add_service(self, service):
+        """Register a service for monitoring."""
 
         self.services[service.name] = service
-
-        self.dependency_graph.add_service(
-            service.name
-        )
+        self.dependency_graph.add_service(service.name)
 
         self.record_event(
-            service.name,
-            "SERVICE_REGISTERED",
-            "Service added to monitoring."
+            f"{service.name} service registered."
         )
 
-    def add_dependency(
-        self,
-        service_name,
-        depends_on
-    ):
+    def add_dependency(self, service_name, depends_on):
+        """Register a service dependency."""
 
         self.dependency_graph.add_dependency(
             service_name,
@@ -107,400 +104,287 @@ class MonitoringEngine:
         )
 
         self.record_event(
-            service_name,
-            "DEPENDENCY_ADDED",
-            f"Depends on {depends_on}."
+            f"{service_name} depends on {depends_on}."
         )
 
     def check_health(self, service):
+        """Check whether a service health endpoint responds."""
+
+        start_time = time.time()
 
         try:
-
-            start_time = time.time()
-
             response = requests.get(
                 service.health_url,
                 timeout=3
             )
 
-            response_time = (
-                time.time() - start_time
-            ) * 1000
+            service.response_time = round(
+                (time.time() - start_time) * 1000,
+                2
+            )
 
-            if response.status_code == 200:
-
-                service.status = "HEALTHY"
-                service.response_time = round(
-                    response_time,
-                    2
-                )
-
-                service.last_checked = (
-                    datetime.now().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
-                )
-
-                return True
-
-            service.status = "FAILED"
-
-        except requests.RequestException:
-
-            service.status = "FAILED"
-            service.response_time = 0
-
-        service.last_checked = (
-            datetime.now().strftime(
+            service.last_checked = datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
-        )
 
-        return False
+            if response.status_code == 200:
+                service.status = "Healthy"
+                return True
+
+            service.status = "Unhealthy"
+            return False
+
+        except requests.RequestException:
+            service.response_time = round(
+                (time.time() - start_time) * 1000,
+                2
+            )
+
+            service.last_checked = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            service.status = "Unhealthy"
+            return False
 
     def monitor_all(self):
-        """Check the health of every registered service."""
+        """Check every registered service and recover failures."""
 
         for service in self.services.values():
 
-            healthy = self.check_health(service)
-
-            if healthy:
-
+            if self.check_health(service):
                 print(
-                    f"{service.name} - HEALTHY "
-                    f"({service.response_time} ms)"
+                    f"[RESQ] {service.name} is healthy."
                 )
+                continue
 
-            else:
+            service.total_failures += 1
+            self.total_failures += 1
 
-                print(
-                    f"{service.name} - FAILED"
-                )
+            self.record_event(
+                f"{service.name} service is unhealthy.",
+                "WARNING"
+            )
 
-                self.total_failures += 1
-                service.total_failures += 1
-
-                self.record_event(
-                    service.name,
-                    "FAILURE_DETECTED",
-                    "Health check failed."
-                )
-
-                self.recover_with_dependencies(
-                    service.name
-                )
+            self.recover_with_dependencies(service.name)
 
     def recover_service(self, service_name):
-        """Restart a service using its Python module."""
-
-        import importlib
-        import subprocess
-        import sys
+        """
+        Restart a failed service's Docker container
+        and wait for its health endpoint to respond.
+        """
 
         service = self.services.get(service_name)
 
         if service is None:
+            self.record_event(
+                f"Unknown service: {service_name}",
+                "ERROR"
+            )
             return False
 
         try:
+            client = self.get_docker_client()
 
-            print(
-                f"Attempting recovery for "
-                f"{service_name}..."
+            container = client.containers.get(
+                service.container_name
             )
 
-            # Find and stop the existing service process
-            # using its registered port.
-            if sys.platform == "win32":
-
-                result = subprocess.run(
-                    [
-                        "powershell",
-                        "-NoProfile",
-                        "-Command",
-                        (
-                            f"$connections = Get-NetTCPConnection "
-                            f"-LocalPort {service.port} "
-                            f"-State Listen "
-                            f"-ErrorAction SilentlyContinue; "
-                            f"$connections | ForEach-Object "
-                            f"{{ Stop-Process -Id "
-                            f"$_.OwningProcess -Force "
-                            f"-ErrorAction SilentlyContinue }}"
-                        )
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-
-            time.sleep(2)
-
-            # Start the service again.
-            process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "uvicorn",
-                    f"{service.app_module}:app",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    str(service.port)
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+            self.record_event(
+                f"Restarting Docker container "
+                f"{service.container_name}."
             )
 
-            # Allow the service to initialize.
-            time.sleep(3)
+            container.restart(timeout=10)
 
-            if self.check_health(service):
+            # Wait for the service to become healthy.
+            for attempt in range(15):
+
+                time.sleep(2)
+
+                if self.check_health(service):
+                    self.record_event(
+                        f"{service_name} recovered successfully.",
+                        "SUCCESS"
+                    )
+                    return True
 
                 print(
-                    f"{service_name} recovered successfully!"
+                    f"[RESQ] Waiting for {service_name} "
+                    f"to become healthy "
+                    f"({attempt + 1}/15)..."
                 )
 
-                return True
+            self.record_event(
+                f"{service_name} did not become healthy "
+                f"after restart.",
+                "ERROR"
+            )
 
+            return False
+
+        except docker.errors.DockerException as error:
+            self.record_event(
+                f"Docker recovery failed for "
+                f"{service_name}: {error}",
+                "ERROR"
+            )
             return False
 
         except Exception as error:
-
-            print(
-                f"Recovery error for {service_name}: "
-                f"{error}"
+            self.record_event(
+                f"Unexpected recovery error for "
+                f"{service_name}: {error}",
+                "ERROR"
             )
-
             return False
 
-    def recover_with_dependencies(self, service_name):
-        """Recover dependencies before the failed service."""
-
-        print(
-            f"Calculating recovery order for "
-            f"{service_name}..."
-        )
+    def recover_with_dependencies(self, failed_service):
+        """
+        Recover dependencies before recovering the
+        failed service itself.
+        """
 
         try:
-
             recovery_order = (
                 self.dependency_graph.get_recovery_order()
             )
 
         except ValueError as error:
-
-            print("Dependency error:", error)
-
             self.record_event(
-                service_name,
-                "DEPENDENCY_ERROR",
-                str(error)
+                f"Cannot calculate recovery order: {error}",
+                "ERROR"
             )
-
             return
 
-        if service_name not in recovery_order:
+        if failed_service not in recovery_order:
+            self.record_event(
+                f"{failed_service} is not registered.",
+                "ERROR"
+            )
             return
 
-        target_index = recovery_order.index(
-            service_name
-        )
+        # Only consider dependencies and the failed service.
+        required_services = set()
 
-        required_services = recovery_order[
-            :target_index + 1
-        ]
+        def collect_dependencies(service_name):
+            if service_name in required_services:
+                return
 
-        for current_service in required_services:
+            required_services.add(service_name)
 
-            service = self.services.get(
-                current_service
-            )
+            for dependency in (
+                self.dependency_graph.get_dependencies(
+                    service_name
+                )
+            ):
+                collect_dependencies(dependency)
+
+        collect_dependencies(failed_service)
+
+        for service_name in recovery_order:
+
+            if service_name not in required_services:
+                continue
+
+            service = self.services.get(service_name)
 
             if service is None:
                 continue
 
+            # Do not restart a service that is already healthy.
             if self.check_health(service):
-
-                print(
-                    f"{current_service} is already healthy."
-                )
-
                 continue
 
             if not self.recovery_manager.can_recover(
-                current_service
+                service_name
             ):
-
                 self.record_event(
-                    current_service,
-                    "RECOVERY_BLOCKED",
-                    "Recovery protection prevented another attempt."
+                    f"Recovery not allowed for {service_name}.",
+                    "WARNING"
                 )
-
                 continue
 
             self.recovery_manager.record_attempt(
-                current_service
+                service_name
             )
 
-            self.record_event(
-                current_service,
-                "RECOVERY_STARTED",
-                "Automatic recovery started."
-            )
+            success = self.recover_service(service_name)
 
-            recovered = self.recover_service(
-                current_service
-            )
-
-            if recovered:
-
+            if success:
                 self.recovery_manager.record_success(
-                    current_service
+                    service_name
                 )
-
-                self.successful_recoveries += 1
-
-                self.record_event(
-                    current_service,
-                    "RECOVERY_SUCCESS",
-                    "Service recovered successfully."
-                )
-
             else:
-
                 self.recovery_manager.record_failure(
-                    current_service
+                    service_name
                 )
 
-                self.failed_recoveries += 1
-
-                self.record_event(
-                    current_service,
-                    "RECOVERY_FAILED",
-                    "Automatic recovery failed."
-                )
-
-                # Do not recover dependent services
-                # if their dependency could not recover.
-                break
+                # A dependent service should not be restarted
+                # if its required dependency remains unhealthy.
+                if service_name != failed_service:
+                    self.record_event(
+                        f"Skipping recovery of {failed_service}: "
+                        f"dependency {service_name} is unavailable.",
+                        "WARNING"
+                    )
+                    return
 
     def get_statistics(self):
+        """Return recovery statistics."""
 
-        successful = (
-            self.successful_recoveries
-        )
+        return self.recovery_manager.get_statistics()
 
-        failed = self.failed_recoveries
+    def get_dashboard_data(self):
+        """Return monitoring data for the dashboard."""
+
+        statistics = self.get_statistics()
+
+        successful = statistics["successful_recoveries"]
+        failed = statistics["failed_recoveries"]
 
         total_recoveries = successful + failed
 
         if total_recoveries > 0:
-
             success_rate = round(
-                (successful / total_recoveries) * 100,
+                successful / total_recoveries * 100,
                 2
             )
-
         else:
-
             success_rate = 0
-
-        recovery_stats = (
-            self.recovery_manager.get_statistics()
-        )
-
-        return {
-            "total_failures": self.total_failures,
-            "successful_recoveries": successful,
-            "failed_recoveries": failed,
-            "blocked_recoveries":
-                recovery_stats["blocked_recoveries"],
-            "success_rate": success_rate
-        }
-
-    def get_dashboard_data(self):
-
-        healthy_services = 0
-        failed_services = 0
 
         service_data = []
 
         for service in self.services.values():
-
-            if service.status == "HEALTHY":
-                healthy_services += 1
-
-            elif service.status == "FAILED":
-                failed_services += 1
-
             service_data.append({
                 "name": service.name,
-                "port": service.port,
-                "health_url": service.health_url,
                 "status": service.status,
                 "response_time": service.response_time,
+                "last_checked": service.last_checked,
                 "total_failures": service.total_failures
             })
 
-        statistics = self.get_statistics()
-
         return {
-            "total_services": len(self.services),
-            "healthy_services": healthy_services,
-            "failed_services": failed_services,
             "services": service_data,
-            "total_failures":
-                statistics["total_failures"],
-            "successful_recoveries":
-                statistics["successful_recoveries"],
-            "failed_recoveries":
-                statistics["failed_recoveries"],
-            "blocked_recoveries":
-                statistics["blocked_recoveries"],
-            "success_rate":
-                statistics["success_rate"],
-            "event_history":
-                self.get_event_history()
+            "total_services": len(self.services),
+            "healthy_services": sum(
+                1 for service in self.services.values()
+                if service.status == "Healthy"
+            ),
+            "unhealthy_services": sum(
+                1 for service in self.services.values()
+                if service.status == "Unhealthy"
+            ),
+            "total_failures": self.total_failures,
+            "successful_recoveries": successful,
+            "failed_recoveries": failed,
+            "blocked_recoveries": statistics[
+                "blocked_recoveries"
+            ],
+            "success_rate": success_rate
         }
 
-    def show_dependencies(self):
-
-        self.dependency_graph.show_graph()
-
-    def show_recovery_statistics(self):
-
-        print("\n===== RESQ RECOVERY STATISTICS =====")
-
-        statistics = self.get_statistics()
-
-        for key, value in statistics.items():
-
-            print(
-                key.replace("_", " ").title(),
-                ":",
-                value
-            )
-
     def get_dependency_graph(self):
+        """Return the registered dependency graph."""
 
-        graph = []
-
-        for service_name in sorted(
-            self.dependency_graph.graph
-        ):
-
-            dependencies = (
-                self.dependency_graph.get_dependencies(
-                    service_name
-                )
-            )
-
-            graph.append({
-                "service": service_name,
-                "dependencies": dependencies
-            })
-
-        return graph
+        return self.dependency_graph.graph

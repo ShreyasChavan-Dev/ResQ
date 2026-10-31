@@ -1,0 +1,45 @@
+services:
+  dashboard:
+    build: .
+    container_name: resq-dashboard
+    command: uvicorn service:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - resq-data:/app/runtime
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - backend
+      - payment
+    restart: unless-stopped
+
+  backend:
+    build: .
+    container_name: resq-backend
+    command: uvicorn backend_service:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  payment:
+    build: .
+    container_name: resq-payment
+    command: uvicorn payment_service:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  monitor:
+    build: .
+    container_name: resq-monitor
+    command: python main.py
+    volumes:
+      - resq-data:/app/runtime
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - backend
+      - payment
+    restart: unless-stopped
+
+volumes:
+  resq-data:

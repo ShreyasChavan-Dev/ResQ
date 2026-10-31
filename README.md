@@ -1,32 +1,30 @@
+# ResQ – Intelligent Service Monitoring and Automatic Recovery System
 
-# ResQ - Intelligent Service Monitoring and Automatic Recovery
-
-ResQ is a Python-based service monitoring and automatic recovery system designed to detect service failures, manage recovery attempts, and restore dependent services in the correct order.
+ResQ is a microservice monitoring and automatic recovery system designed to detect service failures, monitor service health, and automatically restart failed Docker containers while considering service dependencies.
 
 ## Features
 
-- **Real-Time Health Monitoring:** Monitors registered services using HTTP health endpoints.
-- **Automatic Failure Detection:** Detects when a monitored service becomes unhealthy.
-- **Automatic Recovery:** Attempts to restart failed services.
-- **Dependency-Aware Recovery:** Restores dependent services in the correct order.
-- **Intelligent Recovery Protection:** Limits repeated recovery attempts and applies cooldown periods.
-- **Event History:** Records service failures and recovery events.
-- **Live Dashboard:** Displays service health, recovery statistics, dependencies, and event history.
-- **Failure Simulation:** Allows testing service failures through the dashboard.
-- **Automated Testing:** Includes unit tests for recovery protection and dependency management.
+- Real-time health monitoring of microservices
+- Automatic detection of service failures
+- Automatic Docker container restart
+- Dependency-aware recovery
+- Recovery attempt limits and cooldown period
+- Dashboard displaying service health and recovery statistics
+- Failure simulation for testing
+- Event history and monitoring logs
+- REST API for dashboard data
 
 ## Technology Stack
 
-- Python
-- FastAPI
-- Uvicorn
-- Requests
-- HTML
-- CSS
-- JavaScript
-- Unittest
+- **Programming Language:** Python
+- **Backend Framework:** FastAPI
+- **Frontend:** HTML, CSS, JavaScript, Jinja2
+- **Containerization:** Docker
+- **Container Management:** Docker Compose
+- **Testing:** Pytest
+- **HTTP Requests:** Requests
 
-## Project Architecture
+## Project Structure
 
 ```text
 ResQ/
@@ -36,6 +34,14 @@ ResQ/
 ├── backend_service.py
 ├── payment_service.py
 ├── simulation.py
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── README.md
+│
+├── dashboard.png
+├── recovery.png
+├── api.png
 │
 ├── monitoring/
 │   ├── __init__.py
@@ -50,109 +56,96 @@ ResQ/
 │   ├── __init__.py
 │   └── dependency_graph.py
 │
-├── tests/
-│   ├── test_recovery_manager.py
-│   └── test_dependency_graph.py
+├── config/
+│   └── settings.py
 │
 ├── templates/
 │   └── index.html
 │
-├── config/
-│   └── settings.py
+├── tests/
+│   ├── test_recovery_manager.py
+│   └── test_dependency_graph.py
 │
-├── requirements.txt
-├── .gitignore
-└── README.md
+└── logs/
 ```
 
-## How It Works
+## System Architecture
 
-1. ResQ continuously checks the health endpoints of registered services.
-2. When a service fails, ResQ detects the failure.
-3. The dependency graph determines the correct recovery order.
-4. The recovery manager checks attempt limits and cooldown restrictions.
-5. ResQ attempts to restart the failed service.
-6. The health endpoint is checked again to verify recovery.
-7. Events and statistics are saved for dashboard display.
+ResQ monitors two microservices:
 
-## Running the Project
+- **Backend Service:** Runs on port 8001.
+- **Payment Service:** Runs on port 8002.
+- **ResQ Dashboard:** Runs on port 8000.
+- **ResQ Monitor:** Continuously checks service health and performs recovery.
 
-### Requirements
+The Payment service depends on the Backend service. Therefore, ResQ considers the dependency order during recovery.
 
-- Python 3.10 or newer
-- Windows for the current failure simulation and automatic process restart implementation
+## How ResQ Works
 
-### Install Dependencies
+1. ResQ periodically sends health-check requests to registered services.
+2. If a service responds successfully, it is marked as Healthy.
+3. If a service does not respond, ResQ marks it as Unhealthy.
+4. ResQ checks the service dependency graph.
+5. The recovery manager checks whether recovery is allowed.
+6. ResQ restarts the failed Docker container.
+7. ResQ checks the service health again.
+8. The dashboard displays the updated service status and recovery events.
+
+## Screenshots
+
+### 1. ResQ Dashboard
+
+![ResQ Dashboard](dashboard.png)
+
+### 2. Automatic Failure Recovery
+
+![ResQ Recovery](recovery.png)
+
+### 3. Dashboard API Response
+
+![ResQ API Response](api.png)
+
+## Requirements
+
+- Windows 10/11 or another operating system supporting Docker
+- Python 3.12 or newer for local development
+- Docker Desktop
+- Docker Compose
+
+## Installation and Execution
+
+### Step 1: Clone the Repository
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/ShreyasChavan-Dev/ResQ.git
+cd ResQ
 ```
 
-### Start Backend Service
+### Step 2: Build Docker Containers
 
 ```bash
-python -m uvicorn backend_service:app --host 127.0.0.1 --port 8001
+docker compose build
 ```
 
-### Start Payment Service
+### Step 3: Start ResQ
 
 ```bash
-python -m uvicorn payment_service:app --host 127.0.0.1 --port 8002
+docker compose up -d
 ```
 
-### Start ResQ Monitoring Engine
+### Step 4: Check Running Containers
 
 ```bash
-python main.py
+docker compose ps
 ```
 
-### Start Dashboard
+The following containers should be running:
 
-```bash
-python -m uvicorn service:app --host 127.0.0.1 --port 8000
-```
+- resq-dashboard
+- resq-backend
+- resq-payment
+- resq-monitor
 
-Open the dashboard:
+### Step 5: Open the Dashboard
 
-http://127.0.0.1:8000
-
-Each command should run in a separate terminal.
-
-## Running Automated Tests
-
-Run all tests using:
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-The tests cover:
-
-- Initial recovery permission
-- Recovery cooldown
-- Maximum recovery attempts
-- Recovery statistics
-- Dependency registration
-- Correct recovery order
-- Circular dependency detection
-
-## Current Project Scope
-
-ResQ is currently a local prototype monitoring two FastAPI services.
-
-The recovery and process-management implementation is designed for the current Windows test environment. Production deployment would require additional features such as distributed monitoring, persistent storage, authentication, security controls, and cross-platform process management.
-
-## Future Enhancements
-
-- Docker-based service management
-- Distributed monitoring
-- Database-backed event history
-- Email and alert notifications
-- More service integrations
-- Advanced failure prediction
-- Authentication and role-based access
-- Cloud deployment
-
-## Project Goal
-
-To demonstrate intelligent service monitoring, automated failure detection, dependency-aware recovery, and fault-tolerant system design using Python.
+Open the following URL in your
